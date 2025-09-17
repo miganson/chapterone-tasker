@@ -95,6 +95,7 @@ export default function HomeScreen() {
 
   const activeCount = tasks.filter((t) => !t.completed).length;
   const doneCount = tasks.length - activeCount;
+  const taskText = tasks.find((t) => t.id === pendingDeleteId)?.text;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -160,7 +161,7 @@ export default function HomeScreen() {
       </View>
       <ConfirmModal
         visible={!!pendingDeleteId}
-        title="Delete task?"
+        title={taskText ? `Delete "${taskText}" task?` : "Delete task?"}
         message="This action can’t be undone."
         danger
         confirmText="Delete"
