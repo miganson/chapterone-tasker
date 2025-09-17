@@ -26,7 +26,10 @@ export default function TaskItem({ task, onToggle, onDelete }: Props) {
 
       <Pressable
         onPress={onToggle}
-        style={({ pressed }) => [styles.textWrap, pressed && styles.pressed]}
+        style={({ pressed }) => [
+          styles.textWrap,
+          pressed ? styles.pressed : undefined,
+        ]}
       >
         <Text style={[styles.itemText, task.completed && styles.itemTextDone]}>
           {task.text}
