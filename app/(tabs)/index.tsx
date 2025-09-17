@@ -1,98 +1,218 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { Ionicons } from "@expo/vector-icons";
+import React, { useMemo, useState } from "react";
+import {
+  Alert,
+  FlatList,
+  Keyboard,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { v4 as uuidv4 } from "uuid";
+import ConfirmModal from "./components/modals/ConfirmModal";
+import TaskInput from "./components/TaskInput";
+import TaskItem from "./components/TaskItem";
+import { Task, TaskId } from "./types/task";
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [text, setText] = useState<string>("");
+  const [pendingDeleteId, setPendingDeleteId] = useState<TaskId | null>(null);
+  const [showDeleteAll, setShowDeleteAll] = useState<boolean>(false);
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const sortedTasks = useMemo(() => {
+    return [...tasks].sort((a, b) => {
+      if (a.completed !== b.completed)
+        return Number(a.completed) - Number(b.completed);
+      return b.createdAt - a.createdAt;
+    });
+  }, [tasks]);
+
+  const addTask = () => {
+    const value = text.trim();
+    if (!value) return;
+    const id = uuidv4();
+    setTasks((prev) => [
+      { id, text: value, completed: false, createdAt: Date.now() },
+      ...prev,
+    ]);
+    setText("");
+    Keyboard.dismiss();
+  };
+
+  const toggleTask = (id: TaskId) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
+    );
+  };
+
+  const deleteTask = (id: TaskId) => {
+    if (Platform.OS === "ios") {
+      const performDelete = () =>
+        setTasks((prev) => prev.filter((t) => t.id !== id));
+      Alert.alert("Delete task", "Are you sure?", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: performDelete },
+      ]);
+    } else {
+      setPendingDeleteId(id);
+    }
+  };
+
+  const confirmDelete = () => {
+    if (pendingDeleteId)
+      setTasks((prev) => prev.filter((t) => t.id !== pendingDeleteId));
+    setPendingDeleteId(null);
+  };
+
+  const cancelDelete = () => setPendingDeleteId(null);
+
+  const deleteAllTasks = () => {
+    if (tasks.length === 0) return;
+    if (Platform.OS === "ios") {
+      Alert.alert("Delete all tasks", "This cannot be undone.", [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete All",
+          style: "destructive",
+          onPress: () => setTasks([]),
+        },
+      ]);
+    } else {
+      setShowDeleteAll(true);
+    }
+  };
+
+  const confirmDeleteAll = () => {
+    setTasks([]);
+    setShowDeleteAll(false);
+  };
+
+  const cancelDeleteAll = () => setShowDeleteAll(false);
+
+  const activeCount = tasks.filter((t) => !t.completed).length;
+  const doneCount = tasks.length - activeCount;
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.container}>
+        <View style={styles.headerRow}>
+          <View style={styles.headerText}>
+            <Text style={styles.title}>Tasks</Text>
+            <Text style={styles.subtitle}>
+              {activeCount} active · {doneCount} completed
+            </Text>
+          </View>
+
+          <Pressable
+            onPress={deleteAllTasks}
+            disabled={tasks.length === 0}
+            android_ripple={{ color: "rgba(0,0,0,0.08)" }}
+            style={({ pressed }) => [
+              styles.deleteAllBtn,
+              pressed ? styles.deleteAllBtnPressed : undefined,
+              tasks.length === 0 ? styles.deleteAllBtnDisabled : undefined,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Delete all tasks"
+          >
+            <Ionicons
+              name="trash-bin-outline"
+              size={16}
+              color={tasks.length === 0 ? "#bdbdbd" : "#e53935"}
+            />
+            <Text
+              style={[
+                styles.deleteAllText,
+                tasks.length === 0 ? styles.deleteAllTextDisabled : undefined,
+              ]}
+            >
+              Delete All
+            </Text>
+          </Pressable>
+        </View>
+
+        <TaskInput
+          value={text}
+          onChangeText={setText}
+          onSubmit={addTask}
+          disabled={!text.trim()}
+        />
+
+        <FlatList
+          data={sortedTasks}
+          keyExtractor={(item) => item.id}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListEmptyComponent={
+            <Text style={styles.empty}>No tasks yet. Add your first one!</Text>
+          }
+          renderItem={({ item }) => (
+            <TaskItem
+              task={item}
+              onToggle={() => toggleTask(item.id)}
+              onDelete={() => deleteTask(item.id)}
+            />
+          )}
+        />
+      </View>
+      <ConfirmModal
+        visible={!!pendingDeleteId}
+        title="Delete task?"
+        message="This action can’t be undone."
+        danger
+        confirmText="Delete"
+        onCancel={cancelDelete}
+        onConfirm={confirmDelete}
+      />
+      <ConfirmModal
+        visible={showDeleteAll}
+        title="Delete all tasks?"
+        message="This will remove every task. This can’t be undone."
+        danger
+        confirmText="Delete All"
+        onCancel={cancelDeleteAll}
+        onConfirm={confirmDeleteAll}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
+  safe: { flex: 1, backgroundColor: "#fff" },
+  container: { flex: 1, paddingHorizontal: 16, paddingTop: 8 },
+
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 8,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  headerText: { flexShrink: 1 },
+
+  title: { fontSize: 28, fontWeight: "700", color: "#202124" },
+  subtitle: { marginTop: 2, color: "#5f6368" },
+
+  separator: { height: 10 },
+  empty: { textAlign: "center", color: "#9aa0a6" },
+
+  deleteAllBtn: {
+    marginLeft: "auto",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 5,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#f1b5b2",
+    backgroundColor: "#fff5f5",
   },
+  deleteAllBtnPressed: { opacity: 0.85 },
+  deleteAllBtnDisabled: {
+    borderColor: "#eee",
+    backgroundColor: "#fafafa",
+  },
+  deleteAllText: { marginLeft: 6, color: "#e53935", fontWeight: "600" },
+  deleteAllTextDisabled: { color: "#bdbdbd" },
 });
